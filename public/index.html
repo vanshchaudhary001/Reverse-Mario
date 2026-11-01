@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Princess Saves Mario: The Reverse Rescue - 3D Cyber Arcade Edition</title>
+  
+  <!-- Google Fonts: Orbitron, Rajdhani, JetBrains Mono, Press Start 2P -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Orbitron:wght@600;700;800;900&family=Press+Start+2P&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Three.js (WebGL 3D Engine) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- GSAP (GreenSock Animation Platform) for 3D Touch, Parallax & Kinetic Dynamics -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+  <!-- MediaPipe Hands & Camera Utils via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+
+  <!-- Screen Space Vignette & Scanlines -->
+  <div id="fx-overlay"></div>
+  <div id="screen-flash"></div>
+
+  <!-- WebGL 3D Canvas -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- Level Announcement Banner -->
+  <div id="ban">STAGE 1: MUSHROOM KINGDOM</div>
+
+  <!-- Floating Cage Rescue Prompt -->
+  <div id="cage-prompt" style="display:none; position:fixed; bottom: 130px; left: 50%; transform: translateX(-50%); background: rgba(15, 23, 42, 0.94); border: 2.5px solid #38bdf8; border-radius: 12px; padding: 12px 28px; color: #fff; font-family: 'Rajdhani', sans-serif; font-size: 21px; font-weight: 700; z-index: 100; box-shadow: 0 0 24px rgba(56, 189, 248, 0.6); pointer-events: none; text-transform: uppercase; letter-spacing: 1.5px; transition: all 0.2s ease;">
+    🔓 PRESS [E] OR TOUCH CAGE TO FREE MARIO!
+  </div>
+
+  <!-- 3D Kinetic HUD Layer -->
+  <div id="hud-overlay">
+    <div class="hud-top-bar">
+      <div class="hud-left">
+        <!-- Stage Chip -->
+        <div class="hud-chip primary" id="hud-chip-level">
+          <span class="hud-label">STAGE</span>
+          <span class="hud-val" id="hud-level-val">1/4</span>
+        </div>
+
+        <!-- Lives Chip -->
+        <div class="hud-chip" id="hud-chip-lives">
+          <span class="hud-label">LIVES</span>
+          <span class="hud-lives" id="hud-lives-val">❤❤❤</span>
+        </div>
+
+        <!-- Coins Chip -->
+        <div class="hud-chip gold" id="hud-chip-coins">
+          <span class="hud-label">COINS</span>
+          <span class="hud-val" id="hud-coins-val" style="color: var(--gold); display: inline-flex; align-items: center;"><img class="hud-coin-img" src="assets/royal_gold_coin.png" alt="coin"> 0</span>
+        </div>
+
+        <!-- Score Chip -->
+        <div class="hud-chip gold" id="hud-chip-score">
+          <span class="hud-label">SCORE</span>
+          <span class="hud-val" id="hud-score-val">0</span>
+        </div>
+
+        <!-- Active Input Badge -->
+        <div class="hud-chip">
+          <span class="hud-label">INPUT</span>
+          <span class="badge-status badge-input" id="hud-input-badge">KEYBOARD ACTIVE</span>
+        </div>
+
+        <!-- Online/Offline Badge -->
+        <div class="hud-chip">
+          <span class="badge-status badge-online" id="hud-net-badge">ONLINE</span>
+        </div>
+      </div>
+
+      <div class="hud-btn-group">
+        <button class="hud-btn" id="btn-toggle-cam">📷 GESTURE ON/OFF</button>
+        <button class="hud-btn" id="btn-toggle-audio">🔊 MUTE</button>
+        <button class="hud-btn" id="btn-pause">⏸ PAUSE</button>
+      </div>
+    </div>
+
+    <!-- Bowser Boss HP Meter (Stage 4) -->
+    <div id="boss-hp-container">
+      <div class="boss-hp-title">
+        <span>🔥 KING BOWSER (MAGMA CORE)</span>
+        <span id="boss-hp-text">140 / 140 HP</span>
+      </div>
+      <div class="boss-hp-track">
+        <div class="boss-hp-fill" id="boss-hp-fill"></div>
+      </div>
+    </div>
+
+    <!-- Bottom Space Holder -->
+    <div style="height: 10px;"></div>
+  </div>
+
+  <!-- Webcam PIP & Landmark Canvas (Snap & Finger Sensor Card matching reference UI) -->
+  <div id="webcam-pip" style="display: none;">
+    <div class="pip-header-bar">
+      <div class="pip-header-left">
+        <span class="pip-status-dot" id="pip-header-dot"></span>
+        <div class="pip-title-text">
+          <span>SNAP & FINGER</span>
+          <span>SENSOR</span>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="pip-header-right" id="pip-header-cam-state">
+          <span>Camera</span>
+          <span>Off</span>
+        </div>
+        <button id="pip-close-btn" class="pip-close-btn" title="Close webcam and return to Fullscreen">✖</button>
+      </div>
+    </div>
+
+    <!-- Inner Viewport Area -->
+    <div class="pip-viewport">
+      <video id="webcam-video" autoplay playsinline muted></video>
+      <canvas id="landmark-canvas"></canvas>
+      
+      <!-- Live HUD Overlays (Cyan Jump Line & Green Neutral Zone matching reference UI) -->
+      <div id="pip-hud-overlay" class="pip-hud-overlay" style="display: none;">
+        <div id="pip-hud-jumpline" class="pip-hud-jumpline">
+          <span class="pip-hud-jumplabel">▲ JUMP LINE</span>
+        </div>
+        <div id="pip-hud-centerbox" class="pip-hud-centerbox"></div>
+      </div>
+
+      <!-- Offline State Overlay -->
+      <div id="pip-offline-overlay" class="pip-screen-overlay" title="Click to start webcam">
+        <div class="pip-emoji-icon">👌</div>
+        <div class="pip-offline-title">Camera Off</div>
+        <div class="pip-offline-subtitle">Click to Start Webcam<br><span style="color: #22d3ee; font-size: 9.5px;">(Keyboard Active by Default)</span></div>
+        <button id="pip-main-toggle-btn" class="pip-turn-btn" type="button">Turn On</button>
+      </div>
+
+      <!-- Quick Turn Off Button when camera is active -->
+      <button id="pip-active-toggle-btn" class="pip-active-turnoff-btn" type="button" style="display: none;">Turn Off</button>
+    </div>
+
+    <!-- Bottom Action Detected Pill -->
+    <div class="pip-action-pill">
+      <div class="pip-action-label">ACTION / GESTURE DETECTED</div>
+      <div class="pip-action-row">
+        <span class="pip-action-dot" id="pip-action-dot"></span>
+        <span class="pip-action-val" id="pip-action-val">NEUTRAL  (STOPPED)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 20-Second Revival Trivia Modal -->
+  <div id="trivia-modal">
+    <div id="trivia-card" class="card-3d">
+      <div class="trivia-header">
+        <span class="trivia-tag" id="trivia-category-badge">CATEGORY: MATH</span>
+        <span class="trivia-timer-badge">REVIVAL WINDOW: <span id="trivia-timer-num">20</span>s</span>
+      </div>
+      <div class="countdown-bar-container">
+        <div id="trivia-countdown-bar"></div>
+      </div>
+      <div class="trivia-question-text" id="trivia-question-text">Loading question...</div>
+      <div class="trivia-options-grid" id="trivia-options-grid"></div>
+    </div>
+  </div>
+
+  <!-- TITLE SCREEN -->
+  <div class="screen-modal active" id="title-screen">
+    <div class="card-3d" id="title-card">
+      <div style="text-align: center; margin-bottom: 8px;">
+        <img src="assets/princess/avatar.png" alt="Princess" style="width: 72px; height: 72px; border-radius: 50%; border: 3px solid #ff2a85; box-shadow: 0 0 20px rgba(255,42,133,0.7); object-fit: cover;">
+      </div>
+      <h1 class="card-title">PRINCESS SAVES MARIO</h1>
+      <p class="card-subtitle">THE REVERSE RESCUE • 3D CYBER ARCADE</p>
+
+      <div style="text-align: center; margin-bottom: 18px; color: #cbd5e1; font-size: 14px; line-height: 1.6;">
+        King Bowser has kidnapped Prince Mario! Armed with her cyber energy blaster and tactical gear, Princess Peach is charging Bowser's floating realms to rescue him!
+      </div>
+
+      <div class="ctrl-grid">
+        <div class="ctrl-item">
+          <span class="ctrl-key">⌨ KEYBOARD CONTROLS (ALWAYS ACTIVE)</span>
+          <span>A / D or ◄ / ►: Run Left / Right</span>
+          <span>W / Space or ▲: Jump & Mid-Air Steer</span>
+          <span>Z, J or F: Wrench Strike | X, K or Q: Fireball Blast</span>
+          <span>E or Enter: Rescue Mario | Esc or P: Pause</span>
+        </div>
+        <div class="ctrl-item">
+          <span class="ctrl-key">✋ SINGLE FINGER & SNAP SENSOR</span>
+          <span>Inside Green Box: Neutral (Stationary)</span>
+          <span>Finger Left / Right: Move Left / Right</span>
+          <span>Above Cyan Line: Jump</span>
+          <span>Finger Snap: Fireball Blast 🔥</span>
+        </div>
+      </div>
+
+      <div class="start-form">
+        <div class="input-field">
+          <label for="player-name-input">OPERATIVE CALLSIGN</label>
+          <input type="text" id="player-name-input" class="cyber-input" value="" placeholder="PEACHMECHANIC" maxlength="25" autocomplete="off">
+        </div>
+        <button class="btn-cyber-primary" id="btn-start-game">START MISSION</button>
+        <button class="btn-cyber-secondary" id="btn-show-leaderboard">VIEW LEADERBOARD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAUSE MENU -->
+  <div class="screen-modal" id="pause-screen">
+    <div class="card-3d">
+      <h2 class="card-title">MISSION PAUSED</h2>
+      <p class="card-subtitle">SYSTEM STATUS NORMAL</p>
+      <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 20px;">
+        <button class="btn-cyber-primary" id="btn-resume-game">RESUME MISSION</button>
+        <button class="btn-cyber-secondary" id="btn-pause-lb">VIEW LEADERBOARD</button>
+        <button class="btn-cyber-secondary" id="btn-restart-game">RESTART MISSION</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD SCREEN -->
+  <div class="screen-modal" id="leaderboard-screen">
+    <div class="card-3d" style="max-width: 620px; width: 92%;">
+      <h2 class="card-title">HALL OF RESCUERS</h2>
+      <p class="card-subtitle">TOP 15 OPERATIVES & BEST SCORES</p>
+      <div style="max-height: 56vh; overflow-y: auto; margin-top: 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.25);">
+        <table class="lb-table" style="margin-top: 0;">
+          <thead style="position: sticky; top: 0; background: rgba(15, 23, 42, 0.95); z-index: 2;">
+            <tr>
+              <th>RANK</th>
+              <th>OPERATIVE</th>
+              <th>SCORE</th>
+              <th>STAGE</th>
+              <th>DURATION</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboard-body">
+            <tr><td colspan="5">Loading rankings...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top: 18px;">
+        <button class="btn-cyber-secondary" id="btn-close-lb">CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VICTORY SCREEN -->
+  <div class="screen-modal" id="victory-screen">
+    <div class="card-3d">
+      <div style="display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 14px;">
+        <img src="assets/princess/avatar.png" alt="Princess Peach" style="width: 76px; height: 76px; border-radius: 50%; border: 3px solid #ff2a85; box-shadow: 0 0 20px rgba(255,42,133,0.7); object-fit: cover;">
+        <span style="font-size: 26px;">❤️</span>
+        <img src="assets/mario.png" alt="Prince Mario" style="width: 76px; height: 76px; border-radius: 50%; border: 3px solid #38bdf8; box-shadow: 0 0 20px rgba(56,189,248,0.7); object-fit: cover; object-position: 50% 12%; background: #0c1222;">
+      </div>
+      <h1 class="card-title" style="color: var(--gold);">MISSION ACCOMPLISHED!</h1>
+      <p class="card-subtitle">PRINCE MARIO IS RESCUED!</p>
+      <div style="text-align: center; margin: 20px 0; font-size: 15px; line-height: 1.7; color: #cbd5e1;">
+        King Bowser has been vanquished at the Magma Core!<br>
+        Prince Mario is safe in Peach's arms! The Mushroom Kingdom is free!
+      </div>
+      <div style="background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 16px; margin-bottom: 20px; font-family: var(--mono); text-align: center;">
+        FINAL SCORE: <span id="victory-score-val" style="color: var(--gold); font-size: 22px; font-weight: 700;">0</span>
+      </div>
+      <button class="btn-cyber-primary" id="btn-victory-restart">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div class="screen-modal" id="gameover-screen">
+    <div class="card-3d">
+      <h1 class="card-title" style="color: #ef4444;">MISSION FAILED</h1>
+      <p class="card-subtitle">ALL LIVES EXHAUSTED</p>
+      <div style="text-align: center; margin: 18px 0; font-family: var(--mono); color: #cbd5e1;">
+        FINAL SCORE: <span id="gameover-score-val" style="color: #fff; font-size: 20px; font-weight: 700;">0</span>
+      </div>
+      <button class="btn-cyber-primary" id="btn-gameover-restart">RETRY MISSION</button>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT ENGINE -->
+    <script src="gesture.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
